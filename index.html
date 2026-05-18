@@ -1,1 +1,39 @@
+<!DOCTYPE html>
+<html>
+<body>
+    <h2>Business Card Scanner</h2>
+    <input type="file" accept="image/*" capture="camera" id="fileInput">
+    <button onclick="upload()">Scan & Save to Sheet</button>
+    <p id="status"></p>
 
+    <script>
+        async function upload() {
+            const status = document.getElementById('status');
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) return alert("Select a photo first!");
+
+            status.innerText = "Processing with AI...";
+            
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = async () => {
+                const base64 = reader.result.split(',')[1];
+                
+                // Replace with YOUR Web App URL from Phase 1
+                const webAppUrl = "YOUR_WEB_APP_URL_HERE";
+
+                try {
+                    await fetch(webAppUrl, {
+                        method: 'POST',
+                        mode: 'no-cors', // Apps Script requires this for cross-origin
+                        body: JSON.stringify({ image: base64 })
+                    });
+                    status.innerText = "Success! Check your Google Sheet.";
+                } catch (e) {
+                    status.innerText = "Error: " + e.message;
+                }
+            };
+        }
+    </script>
+</body>
+</html>
