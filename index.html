@@ -1,39 +1,142 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Name Card Scanner</title>
+    <!-- Tesseract OCR Library -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <style>
+        :root { --primary: #2563eb; --success: #059669; --bg: #f8fafc; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .card { background: white; padding: 24px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); width: 100%; max-width: 450px; }
+        h2 { margin-top: 0; color: #1e293b; font-size: 1.5rem; text-align: center; }
+        
+        #preview { width: 100%; border-radius: 12px; margin: 15px 0; display: none; border: 2px dashed #cbd5e1; }
+        
+        .btn-upload { background: var(--primary); color: white; padding: 14px; border-radius: 12px; text-align: center; cursor: pointer; display: block; font-weight: 600; margin-bottom: 10px; }
+        input[type="file"] { display: none; }
+        
+        .status { display: none; text-align: center; color: var(--primary); font-weight: 500; margin: 10px 0; }
+        
+        .result-group { margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+        label { display: block; font-size: 0.875rem; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+        input, textarea { width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; font-size: 14px; }
+        
+        .btn-save { background: var(--success); color: white; border: none; width: 100%; padding: 14px; border-radius: 12px; font-weight: 600; cursor: pointer; font-size: 1rem; }
+        .btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
+    </style>
+</head>
 <body>
-    <h2>Business Card Scanner</h2>
-    <input type="file" accept="image/*" capture="camera" id="fileInput">
-    <button onclick="upload()">Scan & Save to Sheet</button>
-    <p id="status"></p>
 
-    <script>
-        async function upload() {
-            const status = document.getElementById('status');
-            const file = document.getElementById('fileInput').files[0];
-            if (!file) return alert("Select a photo first!");
+<div class="card">
+    <h2>Name Card Scanner</h2>
+    
+    <label class="btn-upload">
+        📷 Take Photo / Upload Card
+        <input type="file" id="imageInput" accept="image/*" capture="environment">
+    </label>
 
-            status.innerText = "Processing with AI...";
+    <img id="preview" src="" alt="Scan Preview">
+    <div id="status" class="status">Processing text with AI...</div>
+
+    <div id="resultArea" style="display:none;" class="result-group">
+        <label>Name (First Line Detected):</label>
+        <input type="text" id="cardName" placeholder="Full Name">
+
+        <label>Detected Email:</label>
+        <input type="text" id="cardEmail" placeholder="Email Address">
+
+        <label>Detected Phone:</label>
+        <input type="text" id="cardPhone" placeholder="Phone Number">
+        
+        <label>Full Extracted Text:</label>
+        <textarea id="ocrResult" rows="4"></textarea>
+        
+        <button id="saveBtn" class="btn-save">Save to Google Sheet</button>
+    </div>
+</div>
+
+<script>
+    const imageInput = document.getElementById('imageInput');
+    const preview = document.getElementById('preview');
+    const status = document.getElementById('status');
+    const resultArea = document.getElementById('resultArea');
+    const saveBtn = document.getElementById('saveBtn');
+
+    // Your confirmed Google Script URL
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzZa_HF0UiWbZ-FFmHq_uWrkuwIgrm5drd9pqGI8_hT4u6mLWwAhfzte3sWg_VXIq1t2g/exec';
+
+    imageInput.addEventListener('change', async function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // Show UI feedback
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = 'block';
+        status.style.display = 'block';
+        resultArea.style.display = 'none';
+
+        try {
+            // Run Tesseract OCR
+            const result = await Tesseract.recognize(file, 'eng');
+            const fullText = result.data.text;
             
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = async () => {
-                const base64 = reader.result.split(',')[1];
-                
-                // Replace with YOUR Web App URL from Phase 1
-                const webAppUrl = "YOUR_WEB_APP_URL_HERE";
+            // Clean and extract data
+            const lines = fullText.split('\n').map(l => l.trim()).filter(l => l.length > 1);
+            
+            // 1. Extract Email
+            const emailMatch = fullText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+            // 2. Extract Phone (basic pattern)
+            const phoneMatch = fullText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);
 
-                try {
-                    await fetch(webAppUrl, {
-                        method: 'POST',
-                        mode: 'no-cors', // Apps Script requires this for cross-origin
-                        body: JSON.stringify({ image: base64 })
-                    });
-                    status.innerText = "Success! Check your Google Sheet.";
-                } catch (e) {
-                    status.innerText = "Error: " + e.message;
-                }
-            };
+            // Fill UI
+            document.getElementById('cardName').value = lines[0] || "";
+            document.getElementById('cardEmail').value = emailMatch ? emailMatch[0] : "";
+            document.getElementById('cardPhone').value = phoneMatch ? phoneMatch[0] : "";
+            document.getElementById('ocrResult').value = fullText;
+
+            status.style.display = 'none';
+            resultArea.style.display = 'block';
+        } catch (err) {
+            alert("Error reading card. Try a clearer photo.");
+            console.error(err);
+            status.style.display = 'none';
         }
-    </script>
+    });
+
+    saveBtn.addEventListener('click', function() {
+        saveBtn.innerText = "Saving...";
+        saveBtn.disabled = true;
+
+        const payload = {
+            name: document.getElementById('cardName').value,
+            text: `Email: ${document.getElementById('cardEmail').value}\nPhone: ${document.getElementById('cardPhone').value}\n---\n${document.getElementById('ocrResult').value}`
+        };
+
+        // Send to Google Sheets
+        fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors', // Essential for Google Scripts
+            cache: 'no-cache',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(() => {
+            alert('Data sent to Google Sheet!');
+            saveBtn.innerText = "Save to Google Sheet";
+            saveBtn.disabled = false;
+            // Reset UI
+            preview.style.display = 'none';
+            resultArea.style.display = 'none';
+            imageInput.value = "";
+        })
+        .catch(err => {
+            alert('Error saving data.');
+            saveBtn.disabled = false;
+        });
+    });
+</script>
+
 </body>
 </html>
